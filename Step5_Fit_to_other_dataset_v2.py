@@ -8,12 +8,20 @@ UNet + MoFA
 """
 import os
 import torch
+#import math
 import torch.optim as optim
 import util.util as util
 import csv
 import util.load_dataset_v2 as load_dataset
+#import util.load_object as lob
+import renderer.rendering as ren
+import encoder.encoder as enc
 import time
+#import UNet.UNet as unet
 import argparse
+from datetime import date
+import util.advanced_losses as adlosses
+from models import networks
 import pickle
 import FOCUS_model.FOCUS_EM as FOCUS_EM
 from util.get_landmarks import get_landmarks_main
@@ -80,6 +88,12 @@ else:
     args.pretrained_unet_path = current_path+'/MoFA_UNet_Save/MoFA_UNet_CelebAHQ/unet_200000.model'
 
 
+#unet_for_mask = torch.load(args.pretrained_unet_path, map_location=args.device)
+#enc_net = torch.load(args.pretrained_encnet_path, map_location=args.device)
+
+#print('Loading pre-trained unet: \n'+args.pretrained_encnet_path +'\n' +args.pretrained_unet_path)
+
+
 
 
 '''------------------
@@ -101,7 +115,9 @@ cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
 -------------'''
 img_path = args.img_path
 save_name = time.time()
-
+#save_dir = './Results/{}'.format(save_name)
+#if not os.path.exists(save_dir):
+#    os.makedirs(save_dir)
 
 args.train_landmark_filepath = get_landmarks_main(img_path,output_path) 
 
@@ -184,6 +200,8 @@ for ep in range(0,epoch):
         a=count_parameters(FOCUSModel.enc_net)
         b=count_parameters(FOCUSModel.unet_for_mask)
         if (ct-ct_begin) % 5000 == 0:
+            #enc_net.eval()
+            #unet_for_mask.eval()
             test_raster_images = []
             valid_loss_mask_temp = []
 
@@ -196,7 +214,8 @@ for ep in range(0,epoch):
                     raster_image_fitted = FOCUSModel.reconstructed_results['imgs_fitted']
                     valid_loss_mask = FOCUSModel.reconstructed_results['est_mask']
                     
-                    
+                    #_, _, raster_image,raster_mask,fg_mask, valid_loss_mask = proc_mofaunet(images,landmarks,True,False)
+					
                     test_raster_images += [raster_image_fitted]
                     valid_loss_mask_temp += [valid_loss_mask]
 					
@@ -224,9 +243,13 @@ for ep in range(0,epoch):
 				
                 for i_test, data_test in enumerate(trainloader,0):
                     data_test=FOCUSModel.data_to_device(data_test)
+                    #image = data_test['img']
+                    #landmark = data_test['landmark']
                     c_test+=1
                     with torch.no_grad():
                         loss_, losses_return_,_, _,_,_ = FOCUSModel.proc_EM(data_test,train_net=False)
+                    #with torch.no_grad():
+                        #loss_, losses_return_,_, _,_,_ = proc_mofaunet(image,landmark,True,False)
                         mean_test_losses += losses_return_
                 mean_test_losses = mean_test_losses/c_test
                 str = 'test loss:{}'.format(ct)
@@ -254,18 +277,24 @@ for ep in range(0,epoch):
         if images.shape[0]!=batch:
         	continue 
         if ct %30000 >5000:
+            #enc_net.train()
+            #unet_for_mask.eval()
+            #loss_mofa, losses_return_mofa, _,_,_,_= proc_mofaunet(images,landmarks,True,'mofa')
             loss_mofa, losses_return_mofa, _,_,_,_= FOCUSModel.proc_EM(data,'mofa')
             loss_mofa.backward()
             optimizer_mofa.step()
 			
             mean_losses_mofa+= losses_return_mofa
-			
+			#optimizer_mofa.zero_grad()
         else:
+            #unet_for_mask.train()
+            #enc_net.eval()
             loss_unet, losses_return_unet, _,_,_,_=  FOCUSModel.proc_EM(data,'unet')
+            #loss_unet, losses_return_unet, _,_,_,_= proc_mofaunet(images,landmarks,True,'unet')
             loss_unet.backward()
             optimizer_unet.step()
 			
-            
+			#optimizer_unet.zero_grad()
             mean_losses_unet+= losses_return_unet
         ct += 1
         scheduler_unet.step()

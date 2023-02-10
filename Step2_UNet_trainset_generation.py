@@ -9,6 +9,8 @@ import encoder.encoder as enc
 import cv2
 import numpy as np
 import argparse
+from util.advanced_losses import occlusionPhotometricLossWithoutBackground
+
 par = argparse.ArgumentParser(description='Generate training set for UNet')
 par.add_argument('--pretrained_MoFA',default = './MoFA_UNet_Save/pretrain_mofa/enc_net_300000.model',type=str,help='Path of the pre-trained model')
 par.add_argument('--gpu',default=0,type=int,help='The GPU ID')
@@ -50,14 +52,7 @@ render_net = ren.Renderer(32)   #block_size^2 pixels are simultaneously processe
 enc_net = enc.FaceEncoder(obj).to(device)
 
 
-def occlusionPhotometricLossWithoutBackground(gt,rendered,fgmask,standardDeviation=0.043,backgroundStDevsFromMean=3.0):
-	normalizer = (-3 / 2 * math.log(2 * math.pi) - 3 * math.log(standardDeviation))
-	fullForegroundLogLikelihood = (torch.sum(torch.pow(gt - rendered,2), axis=1)) * -0.5 / standardDeviation / standardDeviation + normalizer
-	uniformBackgroundLogLikelihood = math.pow(backgroundStDevsFromMean * standardDeviation, 2) * -0.5 / standardDeviation / standardDeviation + normalizer
-	occlusionForegroundMask = fgmask * (fullForegroundLogLikelihood > uniformBackgroundLogLikelihood).type(torch.FloatTensor).cuda(util.device_ids[GPU_no ])
-	foregroundLogLikelihood = occlusionForegroundMask*fullForegroundLogLikelihood
-	lh = torch.mean(foregroundLogLikelihood)
-	return -lh, occlusionForegroundMask
+
 
 
 

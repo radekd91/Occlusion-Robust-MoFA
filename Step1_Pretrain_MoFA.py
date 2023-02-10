@@ -21,7 +21,7 @@ import argparse
 from datetime import date
 from facenet_pytorch import InceptionResnetV1
 from models import networks
-
+from util.advanced_losses import occlusionPhotometricLossWithoutBackground
 print(networks.__file__)
 
 par = argparse.ArgumentParser(description='Pretrain MoFA')
@@ -128,16 +128,6 @@ for i_test, data_test in enumerate(testloader, 0):
 	test_landmarks +=[landmarks]
 util.write_tiled_image(torch.cat(test_input_images,dim=0), output_path + 'test_gt.png',10)
 
-
-# Occlusion Robust Loss for unsupervised initialization
-def occlusionPhotometricLossWithoutBackground(gt,rendered,fgmask,standardDeviation=0.043,backgroundStDevsFromMean=3.0):
-	normalizer = (-3 / 2 * math.log(2 * math.pi) - 3 * math.log(standardDeviation))
-	fullForegroundLogLikelihood = (torch.sum(torch.pow(gt - rendered,2), axis=1)) * -0.5 / standardDeviation / standardDeviation + normalizer
-	uniformBackgroundLogLikelihood = math.pow(backgroundStDevsFromMean * standardDeviation, 2) * -0.5 / standardDeviation / standardDeviation + normalizer
-	occlusionForegroundMask = fgmask * (fullForegroundLogLikelihood > uniformBackgroundLogLikelihood).type(torch.FloatTensor).cuda(util.device_ids[GPU_no])
-	foregroundLogLikelihood = occlusionForegroundMask*fullForegroundLogLikelihood
-	lh = torch.mean(foregroundLogLikelihood)
-	return -lh, occlusionForegroundMask
 
 
 '''-------------

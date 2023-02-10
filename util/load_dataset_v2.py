@@ -122,7 +122,7 @@ def write_5lms(points,txt_temp):
     
 class CelebDataset(torch.utils.data.Dataset):
 
-    def __init__(self,device,root,train,height=224,width=224,scale=1,landmark_file=False,test_mode = False,occloss_mode = False,is_use_aug=True,bfm_folder='./BFM'):
+    def __init__(self,root,train,height=224,width=224,scale=1,landmark_file=False,test_mode = False,occloss_mode = False,is_use_aug=True,bfm_folder='./BFM'):
         super(CelebDataset,self)
         #self.test_mode = test_mode
         self.train = train
@@ -171,20 +171,17 @@ class CelebDataset(torch.utils.data.Dataset):
     def __getitem__(self,index):
         
         landmark_cpu = [int(x) for x in self.landmark_list[index][1:]]
-        filename = (self.root+self.landmark_list[index][0]).replace('//','/')
-        
+        filename = self.landmark_list[index][0]
 
         if os.path.exists(filename):
             filename_ = filename
             
         else:
-            filename = self.landmark_list[index][0]
+            filename = os.path.join(self.root,self.landmark_list[index][0])
             if os.path.exists(filename):
                 filename_ = filename
             else:
                 print('Image does not exist: ' + filename)
-        #image = cv2.imread(filename_)
-        #image=cv2.resize(image,(224,224))
         
         
         raw_img = Image.open(filename_).convert('RGB')
@@ -221,11 +218,7 @@ class CelebDataset(torch.utils.data.Dataset):
                 _, gt_mask, _, _ = align_img(raw_gtmask, raw_lm, self.lm3d_std, mask=None)
                 gt_mask_tensor = transform(gt_mask)[:1, ...]#.to(self.device)
                 out['mask_gt'] = gt_mask_tensor
-                '''else:
-                gt_mask_tensor = False'''
-                
-            
-    
+
         return out
         
         
