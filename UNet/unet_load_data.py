@@ -85,31 +85,28 @@ def parse_label(label):
     return torch.tensor(np.array(label).astype(np.float32))
 class UNetDataset(torch.utils.data.Dataset):
 
-    def __init__(self,device,root,train,landmark_file,height,width,scale=1,test_mode = False,is_use_aug=True,bfm_folder='./BFM'):
+    def __init__(self,train,landmark_file,height=224,width=224,scale=1,is_use_aug=True,bfm_folder='./BFM'):
         super(UNetDataset,self)
         self.train = train
-        self.test_mode = test_mode
+        self.test_mode = not train
 
-        if self.train:
-            landmark_filename = root+'../train_landmarks.csv'
-        else:
-            landmark_filename = root+'../val_landmarks.csv'
-        if self.test_mode:
-            self.train = False
-            if landmark_file:
-                landmark_filename = landmark_file
-            else:
-                landmark_filename = root+'../test_landmarks.csv'
-        current_path = os.getcwd()
-        self.root = current_path +'../MoFA_UNet_Save/UNet_trainset/' 
-        print(landmark_filename)
-        f=open(landmark_filename)
+        
+        print(landmark_file)
+        f=open(landmark_file)
         f_csv=csv.reader(f,delimiter=',')
         self.landmark_list = list(f_csv)
-        random.shuffle(self.landmark_list)
+        landmark_list_ = []
+        for filename_tmp in self.landmark_list:
+            name,_ = os.path.splitext(filename_tmp[0])
+            
+            if name[-4:] == '_org':
+                #print(name)
+                landmark_list_ += [filename_tmp]
+        self.landmark_list = landmark_list_
+        
         self.num = len(self.landmark_list)
         self.use_aug = is_use_aug
-        self.device = device
+        
         self.scale = scale
         self.width = width
         self.height = height
@@ -122,47 +119,32 @@ class UNetDataset(torch.utils.data.Dataset):
 
     def __getitem__(self,index):
 
-        try:
-            filename = self.root+self.landmark_list[index][0].replace('.jpg','_org.jpg')
-        except:
-            pass
-        if not os.path.exists(filename):
-            print('Image does not exist: ' + filename)
+        filename = self.landmark_list[index][0]
+        filename_tmp,fileext_tmp=os.path.splitext(filename)
+        skin_vis_mask_path = filename_tmp[:-4]+'_mask'+fileext_tmp
+        rastered_filename =filename_tmp[:-4]+'_raster'+fileext_tmp
+        if not (os.path.exists(filename) and os.path.exists(skin_vis_mask_path) and \
+                os.path.exists(rastered_filename)) :
+            print('Corresponding image does not exist: ' + filename)
+        
+        
         landmark_cpu = [int(x) for x in self.landmark_list[index][1:]]
 
-
-
-        try:
-            image = cv2.imread(filename)
-            width_img = image.shape[1]
-        except:
-            print(filename)
+# align images
         raw_img = Image.open(filename).convert('RGB')
-        #raw_msk = Image.open(msk_path).convert('RGB')
         _, H = raw_img.size
         raw_lm = np.reshape(np.asarray(landmark_cpu),(-1,2)).astype(np.float32)
         raw_lm = np.stack([raw_lm[:,0],H-raw_lm[:,1]],1)
-        
-        
-        
+
+
         _, img, lm, msk = align_img(raw_img, raw_lm, self.lm3d_std, mask=None)
-            
-        skin_vis_mask_path = filename.replace('.jpg','_mask.jpg')
-        rastered_filename = filename.replace('.jpg','_raster.jpg')
-        if os.path.exists(skin_vis_mask_path):
-                
-            _,num_temp = os.path.split(filename)
-            num_temp = int(num_temp[:-8])
                
-            raw_gtmask = Image.open(skin_vis_mask_path).convert('RGB')
-            _, gt_mask, _, _ = align_img(raw_gtmask, raw_lm, self.lm3d_std, mask=None)
+        raw_gtmask = Image.open(skin_vis_mask_path).convert('RGB')
+        _, gt_mask, _, _ = align_img(raw_gtmask, raw_lm, self.lm3d_std, mask=None)
                 
-            raw_raster = Image.open( rastered_filename).convert('RGB')
-            _, gt_raster, _, _ = align_img(raw_raster, raw_lm, self.lm3d_std, mask=None)
-        else:
-            print('!Mask does not exist: '+filename)
-            index+=1
-            self.__getitem__(index+1)
+        raw_raster = Image.open( rastered_filename).convert('RGB')
+        _, gt_raster, _, _ = align_img(raw_raster, raw_lm, self.lm3d_std, mask=None)
+        
         
         # Data augmentation is only for training
         aug_flag = self.use_aug and self.train
@@ -173,15 +155,22 @@ class UNetDataset(torch.utils.data.Dataset):
             img, lm, gt_mask , gt_raster= self._augmentation(img, lm, msk,raster)
         _, H = img.size
         transform = get_transform()
-        img_tensor = transform(img).to(self.device)
-
-        gt_raster_tensor = transform(gt_raster)[:1, ...].to(self.device)
-        gt_mask_tensor = transform(gt_mask)[:1, ...].to(self.device)
+        img_tensor = transform(img)#.to(self.device)
+        gt_raster_tensor = transform(gt_raster)[:1, ...]#.to(self.device)
+        gt_mask_tensor = transform(gt_mask)[:1, ...]#.to(self.device)
         
         img_input = np.concatenate((img, gt_raster),axis=2)
         IMAGE_INPUT = tf.to_tensor(img_input)
-        IMAGE_INPUT = torch.flip(IMAGE_INPUT, [0]).to(self.device)
-        return IMAGE_INPUT, gt_mask_tensor,img_tensor,gt_raster_tensor
+        IMAGE_INPUT = torch.flip(IMAGE_INPUT, [0])#.to(self.device)
+        
+        out = {}
+        
+        out['img'] = img_tensor
+        out['filename'] = filename
+        out['concat_input'] = IMAGE_INPUT
+        out['pseudo_mask'] = gt_mask_tensor
+        out['raster_mask'] = gt_raster_tensor
+        return out #IMAGE_INPUT, gt_mask_tensor,img_tensor,gt_raster_tensor
 
             
     def _augmentation(self, img, lm,  msk=None,raster=None):

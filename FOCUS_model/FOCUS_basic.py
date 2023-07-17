@@ -15,7 +15,7 @@ import encoder.encoder as enc
 import renderer.rendering as ren
 from util.advanced_losses import occlusionPhotometricLossWithoutBackground,PerceptualLoss
 import os
-from models import networks
+
 
 class FOCUSmodel(ABC):
 
@@ -66,7 +66,8 @@ class FOCUSmodel(ABC):
     def init_full_facemodel(self):
         print('Loading intact face model for NoW Challenge.')
         current_path = os.getcwd()  
-        model_path = current_path+'/basel_3DMM/model2017-1_bfm_nomouth.h5'
+        # model_path = current_path+'/basel_3DMM/model2017-1_bfm_nomouth.h5'
+        model_path = self.args.model_path
         self.obj_intact = lob.Object3DMM(model_path,self.args.device)
         self.triangles_intact = self.obj_intact.face.detach().to('cpu').numpy().T
         self.render_net_fullface = ren.Renderer(32)   #block_size^2 pixels are simultaneously processed in renderer, lager block_size consumes lager memory
@@ -74,10 +75,12 @@ class FOCUSmodel(ABC):
     
     
     def init_faceautoencoder(self):
-        print('Loading face auto-encoder:' + self.args.pretrained_encnet_path)
-        if os.path.exists(self.args.pretrained_encnet_path):
+        
+        if os.path.exists(self.args.pretrained_encnet_path) and self.args.pretrained_encnet_path:
+            print('Loading face auto-encoder:' + self.args.pretrained_encnet_path)
             self.enc_net = torch.load(self.args.pretrained_encnet_path, map_location=self.args.device)
         else:
+            print('Train the Autoencoder from the beginning...')
             self.enc_net = enc.FaceEncoder(self.obj).to(self.args.device)
         
         self.render_net = ren.Renderer(32)   #block_size^2 pixels are simultaneously processed in renderer, lager block_size consumes lager memory
@@ -126,14 +129,15 @@ class FOCUSmodel(ABC):
         
         vertex_cropped, color, R, T, sh_coef = enc.convert_params(shape_param, exp_param,\
                                                             color_param, camera_param, sh_param,self.obj,self.T_ini,self.sh_ini,False)
-        projected_vertex_cropped, _, _, _, raster_image_fitted, raster_mask = self.render_net(self.obj.face,\
+        projected_vertex_cropped, _, _, _, raster_image, raster_mask = self.render_net(self.obj.face,\
                                                                 vertex_cropped,color, sh_coef, self.A, R, T, images,ren.RASTERIZE_DIFFERENTIABLE_IMAGE,False, 5, True)
         
         
     	
     	#util.show_tensor_images(raster_image_intact,lmring)
-        raster_image_fitted = images*(1-raster_mask.unsqueeze(1))+raster_image_fitted*raster_mask.unsqueeze(1)
+        raster_image_fitted = images*(1-raster_mask.unsqueeze(1))+raster_image*raster_mask.unsqueeze(1)
         self.reconstructed_results = {'raster_masks':raster_mask,
+                                      'raster_imgs':raster_image,
                 'imgs_fitted':raster_image_fitted,
                 'proj_vert':projected_vertex_cropped,
                 'enc_paras':enc_paras
@@ -160,6 +164,7 @@ class FOCUSmodel(ABC):
         else:
             print('Please specify the correct method to estimate occlusions.')
         self.reconstructed_results.update({'est_mask':occlusion_fg_mask})
+        return rec_loss, occlusion_fg_mask
     def forward_intactfaceshape_NOW(self,data):
         '''
         for NoW Challenge

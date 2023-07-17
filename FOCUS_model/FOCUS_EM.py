@@ -19,8 +19,7 @@ class FOCUS_EM(FOCUSmodel):
         super(FOCUS_EM, self).__init__(args)
         self.init_for_training()
         self.init_segment_net()
-        self.dist_weight=self.args.dist_weight#{'w_neighbour':15,'w_dist': 3,'w_area':0.5,'w_preserve':0.25,'w_binary': 10}
-        
+        self.dist_weight=self.args.dist_weight
 
 
     def proc_EM(self,data,train_net):
@@ -53,8 +52,6 @@ class FOCUS_EM(FOCUSmodel):
     	----------------------------------------'''
 
         lm68 = projected_vertex[:,0:2,self.obj.landmark]
-        #image_concatenated = torch.cat(( raster_image,images),axis = 1)
-        #unet_est_mask = self.unet_for_mask(image_concatenated)
         valid_loss_mask = raster_mask.unsqueeze(1)*unet_est_mask
 
 
@@ -71,10 +68,6 @@ class FOCUS_EM(FOCUSmodel):
             loss_unet = mask_binary_loss*self.dist_weight['w_binary'] +  bg_unet_loss*self.dist_weight['w_area']
         if train_net == 'mofa':
 
-            #pred_feat = self.net_recog(image=raster_image,pred_lm=lm68.transpose(1,2))
-            #gt_feat = self.net_recog(images,landmarks.transpose(1,2))
-            #cosine_d = torch.sum(pred_feat * gt_feat, dim=-1)
-            #perceptual_loss =  torch.sum(1 - cosine_d) / cosine_d.shape[0]
             land_loss = torch.mean((self.obj.weight_lm*(landmarks-lm68))**2)
             stat_reg = (torch.sum(shape_param ** 2) + torch.sum(exp_param ** 2) + torch.sum(color_param ** 2))/float(batch)/224.0
             loss_mofa = masked_rec_loss*0.5 + perceptual_loss*0.25+ 1e-1 * stat_reg + 5e-4 * land_loss +6e-2* bg_unet_loss
@@ -84,11 +77,6 @@ class FOCUS_EM(FOCUSmodel):
         if train_net == False:
     		
             mask_binary_loss= (0.5- torch.mean(torch.norm(valid_loss_mask-0.5,2,1)))
-            '''pred_feat = self.net_recog(image=raster_image,pred_lm=lm68.transpose(1,2))
-            gt_feat = self.net_recog(images,landmarks.transpose(1,2))
-            cosine_d = torch.sum(pred_feat * gt_feat, dim=-1)
-            perceptual_loss =  torch.sum(1 - cosine_d) / cosine_d.shape[0]'''
-            
             land_loss = torch.mean((self.obj.weight_lm*(landmarks-projected_vertex[:,0:2,self.obj.landmark]))**2)
             stat_reg = (torch.sum(shape_param ** 2) + torch.sum(exp_param ** 2) + torch.sum(color_param ** 2))/float(batch)/224.0
 
@@ -98,11 +86,6 @@ class FOCUS_EM(FOCUSmodel):
     	
 
         I_target_masked=images*  valid_loss_mask
-        #id_target_masked = self.net_recog(I_target_masked, landmarks.transpose(1,2),is_shallow =True)
-        #id_target = self.net_recog(images, landmarks.transpose(1,2),is_shallow =True)
-        #id_reconstruct_masked = self.net_recog(raster_image*  valid_loss_mask , pred_lm=lm68.transpose(1,2),is_shallow =True)
-        #I_IM_Per_loss = torch.mean(1-cos(id_target, id_target_masked))
-        #IRM_IM_Per_loss = torch.mean(1-cos(id_reconstruct_masked, id_target_masked))
         I_IM_Per_loss = self.get_perceptual_loss(images,I_target_masked, landmarks,landmarks)
         IRM_IM_Per_loss = self.get_perceptual_loss(raster_image*  valid_loss_mask,I_target_masked,lm68,landmarks)
         if train_net=='unet':

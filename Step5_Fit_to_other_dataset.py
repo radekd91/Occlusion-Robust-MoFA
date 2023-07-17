@@ -11,12 +11,14 @@ import torch
 import torch.optim as optim
 import util.util as util
 import csv
-import util.load_dataset_v2 as load_dataset
+import util.load_dataset as load_dataset
 import time
 import argparse
 import pickle
 import FOCUS_model.FOCUS_EM as FOCUS_EM
 from util.get_landmarks import get_landmarks_main
+from util.util import init_meanlosses
+
 #hyper-parameters
 par = argparse.ArgumentParser(description='MoFA')
 
@@ -62,8 +64,6 @@ if not os.path.exists(output_path):
     os.makedirs(output_path)
     
 
-loss_log_path_train = os.path.join(output_path,"{}_loss_train.csv".format(timestamp))
-loss_log_path_test = os.path.join(output_path,"{}_loss_test.csv".format(timestamp))
 
 
 
@@ -71,7 +71,6 @@ loss_log_path_test = os.path.join(output_path,"{}_loss_test.csv".format(timestam
 load pretrained model and continue training
 -----------------------------------------'''
 if ct!=0:
-    
 	args.pretrained_encnet_path = os.path.join(output_path,'enc_net_{:06d}.model'.format(ct))
 	args.pretrained_unet_path = os.path.join(output_path,'unet_{:06d}.model'.format(ct))
 	
@@ -90,10 +89,6 @@ batch = args.batch_size
 
 epoch = args.epochs
 test_batch_num = 5
-
-
-
-cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
 
 
 '''-------------
@@ -123,6 +118,10 @@ with open(log_path_train, 'wb') as f:
     pickle.dump(dist_log, f)
 
 del dist_log
+
+
+loss_log_path_train = os.path.join(output_path,"{}_loss_train.csv".format(timestamp))
+loss_log_path_test = os.path.join(output_path,"{}_loss_test.csv".format(timestamp))
 
 if ct != 0:
     try:
@@ -164,7 +163,6 @@ scheduler_unet = torch.optim.lr_scheduler.StepLR(optimizer_unet,step_size=args.d
 print('Training ...')
 start = time.time()
 
-def init_meanlosses(num_losses=10): return torch.zeros([num_losses])
 
 mean_losses_mofa = init_meanlosses()
 mean_losses_unet = init_meanlosses()
@@ -297,4 +295,4 @@ for ep in range(0,epoch):
             mean_losses_mofa = init_meanlosses()
 
 
-torch.save(enc_net, os.path.join(output_path, 'enc_net_{:06d}.model'.format(ct)))
+torch.save(FOCUSModel.enc_net, os.path.join(output_path, 'enc_net_{:06d}.model'.format(ct)))

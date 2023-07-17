@@ -6,6 +6,7 @@ from util.preprocess import align_for_lm
 import dlib
 import urllib
 import bz2
+import sys
 
 mean_face = np.loadtxt('util/test_mean_face.txt')
 mean_face = mean_face.reshape([68, 2])
@@ -48,7 +49,7 @@ def load_lm_graph(graph_filename):
     return lm_sess,img_224,output_lm
 
 def is_filename_img(filepath):
-    if '.jpg' in filepath or 'png' in filepath or 'jpeg' in filepath or 'PNG' in filepath :
+    if '.jpg' in filepath or 'png' in filepath or 'jpeg' in filepath or 'PNG' in filepath or 'bmp' in filepath:
         return True
     else:
         return False
@@ -74,11 +75,13 @@ def get_landmarks_main(img_path,save_dir):
     
     anno_filepath = os.path.join(save_dir,'list_landmarks.csv')
     
-    predictor_path = '../Dlib_landmark_detection/model/shape_predictor_68_face_landmarks.dat'  # shape_predictor_68_face_landmarks.dat是进行人脸标定的模型，它是基于HOG特征的，这里是他所在的路径
+    predictor_path = './Dlib_landmark_detection/model/shape_predictor_68_face_landmarks.dat'  # shape_predictor_68_face_landmarks.dat是进行人脸标定的模型，它是基于HOG特征的，这里是他所在的路径
     if not os.path.exists(predictor_path):
+        dlib_model_dir = os.path.split(predictor_path)[0]
+        if not os.path.exists(dlib_model_dir):os.makedirs(dlib_model_dir)
         Detector_URL = 'http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2'
-        urllib.request.urlretrieve(Detector_URL, '../Dlib_model/shape_predictor_68_face_landmarks.dat.bz2')
-        newfile = bz2.decompress( '../Dlib_model/shape_predictor_68_face_landmarks.dat.bz2')
+        urllib.request.urlretrieve(Detector_URL, './Dlib_landmark_detection/model/shape_predictor_68_face_landmarks.dat.bz2')
+        newfile = bz2.decompress( './Dlib_landmark_detection/model/shape_predictor_68_face_landmarks.dat.bz2')
         
     Dlib_detector = dlib.get_frontal_face_detector() #获取人脸分类器
     Dlib_predictor = dlib.shape_predictor(predictor_path)    # 获取人脸检测器
@@ -87,6 +90,9 @@ def get_landmarks_main(img_path,save_dir):
     names = get_image_namelist(img_path)
     print('{} images found.'.format(len(names)))
     detect_68p(Dlib_detector,Dlib_predictor,names,lm_sess,input_op,output_op,save_dir,anno_filepath) # detect landmarks for images
+    del Dlib_predictor
+    del Dlib_detector
+    del lm_sess
     return anno_filepath
 def detect_68p(Dlib_detector,Dlib_predictor,names,sess,input_op,output_op,save_path,anno_filepath):
     print('detecting landmarks......')
@@ -97,6 +103,7 @@ def detect_68p(Dlib_detector,Dlib_predictor,names,sess,input_op,output_op,save_p
     
     anno_file = open(anno_filepath,mode='w')
     path_not_detected = []
+    num_imgs = len(names)
     for i in range(0, len(names)):
         name = names[i]
         #print('%05d' % (i), ' ', name)
@@ -107,7 +114,9 @@ def detect_68p(Dlib_detector,Dlib_predictor,names,sess,input_op,output_op,save_p
         
         img= cv2.imread(full_image_name)
         width_img = img.shape[1]
-        
+        print("\r",end="")
+        print("processing:{:.2f}%: ".format(i/num_imgs *100),"="*(i//int(2*num_imgs/100)),end="")
+        sys.stdout.flush()
         
         dets = Dlib_detector(img, 1) #使用detector进行人脸检测 dets为返回的结果
         if len(dets) == 0:
@@ -194,7 +203,7 @@ def detect_68p(Dlib_detector,Dlib_predictor,names,sess,input_op,output_op,save_p
         anno_file.write(string_to_write)  
 
         
-    print('{} faces not detected'.format(len(path_not_detected)))
+    print('\n{} faces not detected'.format(len(path_not_detected)))
     
     '''not_found_dir,not_found_ext = os.path.splitext(anno_filepath)
     

@@ -50,6 +50,7 @@ class PerceptualLoss():
     def __init__(self,args):
         self.net_recog = networks.define_net_recog(net_recog='r50', pretrained_path='models/ms1mv3_arcface_r50_fp16/backbone.pth')
         self.net_recog = self.net_recog.to(args.device)
+        self.net_recog.training = False
         #self.set_requires_grad(self.net_recog)
     
     def forward(self,I_t,I_r,lm_t,lm_r):
