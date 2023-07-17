@@ -31,8 +31,9 @@ class Object3DMM():
 
         data = h5py.File(filename,'r')
         if is_crop:
-            current_path = os.getcwd() 
-            info_path = current_path+'/basel_3DMM/idxes_crop.pkl'
+            # current_path = os.getcwd() 
+            # info_path = current_path+'/basel_3DMM/idxes_crop.pkl'
+            info_path = os.path.join(os.path.dirname(filename), 'idxes_crop.pkl')
             idxes = pickle.load(open(info_path,'rb'))
             arr_points = data['shape']['representer']['points'][()].take(idxes['points'],axis=1)
             cells = idxes['cells']

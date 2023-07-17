@@ -1,9 +1,9 @@
 import os
 import cv2
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 from util.preprocess import align_for_lm
-import dlib
+# import dlib
 import urllib
 import bz2
 import sys

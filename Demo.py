@@ -9,23 +9,27 @@ Created on Fri Sep  3 10:42:21 2021
 import torch
 import os
 import util.util as util
-import util.load_dataset_v2 as load_dataset
+import util.load_dataset as load_dataset
 import cv2
 import numpy as np
 import argparse
 import FOCUS_model.FOCUS_basic as FOCUSModel
-from util.get_landmarks import get_landmarks_main
+# from util.get_landmarks import get_landmarks_main
 import time
 import pickle
+import warnings
+
 torch.set_grad_enabled(False)
 
+warnings.filterwarnings("ignore")
 
 par = argparse.ArgumentParser(description='Test: MoFA+UNet ')
 par.add_argument('--pretrained_encnet_path',default='./MoFA_UNet_Save/MoFA_UNet_CelebAHQ/unet_200000.model',type=str,help='Path of the pre-trained model')
 par.add_argument('--gpu',default=0,type=int,help='The GPU ID')
 par.add_argument('--batch_size',default=8,type=int,help='Batch size')
 par.add_argument('--img_path',type=str,help='Root of the images')
-
+par.add_argument('--use_landmarks',type=bool, default=False, help='Whether to detect landmarks to align the faces')
+par.add_argument('--use_MisfitPrior',type=util.str2bool,help='Root of the images')
 torch.set_grad_enabled(False) # make sure to not compute gradients for computational performance
 
 args = par.parse_args()
@@ -37,7 +41,6 @@ args.pretrained_encnet_path = args.pretrained_encnet_path.replace('/unet_','/enc
 args.device = torch.device("cuda:{}".format(args.gpu) if torch.cuda.is_available() else "cpu")
 
 #parameters
-batch = args.batch_size
 args.width = args.height = 224
 
 current_path = os.getcwd()  
@@ -95,13 +98,19 @@ with open(log_path_train, 'wb') as f:
 
 del dist_log
 
-landmark_filepath = get_landmarks_main(args.img_path,save_dir) 
+if args.use_landmarks:
+    from util.get_landmarks import get_landmarks_main
+    landmark_filepath = get_landmarks_main(args.img_path,save_dir) 
+else: 
+    landmark_filepath = None
 testset = load_dataset.CelebDataset(args.img_path,False,landmark_file=landmark_filepath)
-testloader = torch.utils.data.DataLoader(testset, batch_size=batch,shuffle=False, num_workers=0)
+testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,shuffle=False, num_workers=0)
 
 im_iter=0
     
-
+if args.use_MisfitPrior:
+    prior_path = './MisfitPrior/MisfitPrior.pt'
+    prior = torch.load(prior_path,map_location=args.device).detach().to('cpu').numpy()
 '''---------------------------------------------------
 Reconstructed results, masks
 ---------------------------------------------------'''
@@ -153,6 +162,8 @@ with torch.no_grad():
 
             # Save vertices for NoW evaluation
             vertexes_temp = vertex_3d[iter_save].detach().to('cpu').numpy()
+            if args.use_MisfitPrior:
+                vertexes_temp -= prior
             util.write_obj_with_colors(filepath_woext_path+'.obj', vertexes_temp.T, FOCUSModel.triangles_intact)
             im_iter+=1
     print('{} images reconstructed'.format(im_iter))
