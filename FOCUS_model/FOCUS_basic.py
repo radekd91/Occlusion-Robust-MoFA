@@ -103,6 +103,17 @@ class FOCUSmodel(ABC):
                 data[key] = data[key].to(self.args.device)
         return data
     
+    def encode(self,images):
+        shape_param, exp_param, color_param, camera_param, sh_param = self.enc_net(images)
+        color_param *= 3    #adjust learning rate
+        camera_param[:,:3] *= 0.3
+        camera_param[:,5] *= 0.005
+        shape_param[:,80:] *= 0 #ignore high dimensional component of BFM
+        exp_param[:,64:] *= 0
+        color_param[:,80:] *= 0
+        
+        enc_paras=[shape_param, exp_param, color_param, camera_param, sh_param]
+        return enc_paras
     
     
     def forward(self,data):
@@ -115,15 +126,9 @@ class FOCUSmodel(ABC):
     	'''
         images=data['img']
         
-        shape_param, exp_param, color_param, camera_param, sh_param = self.enc_net(images)
-        color_param *= 3    #adjust learning rate
-        camera_param[:,:3] *= 0.3
-        camera_param[:,5] *= 0.005
-        shape_param[:,80:] *= 0 #ignore high dimensional component of BFM
-        exp_param[:,64:] *= 0
-        color_param[:,80:] *= 0
+        enc_paras = self.encode(images)
+        shape_param, exp_param, color_param, camera_param, sh_param = enc_paras
         
-        enc_paras=[shape_param, exp_param, color_param, camera_param, sh_param]
     	#vertex, color, R, T, sh_coef = enc.convert_params(shape_param, exp_param*0, color_param, camera_param, sh_param,obj,T_ini,sh_ini,False)
         
         
