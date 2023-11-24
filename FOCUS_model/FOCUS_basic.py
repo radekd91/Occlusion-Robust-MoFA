@@ -115,6 +115,27 @@ class FOCUSmodel(ABC):
         enc_paras=[shape_param, exp_param, color_param, camera_param, sh_param]
         return enc_paras
     
+
+    def decode(self, images, enc_paras):
+        shape_param, exp_param, color_param, camera_param, sh_param = enc_paras
+        vertex_cropped, color, R, T, sh_coef = enc.convert_params(shape_param, exp_param,\
+                                                            color_param, camera_param, sh_param,self.obj,self.T_ini,self.sh_ini,False)
+        projected_vertex_cropped, _, _, _, raster_image, raster_mask = self.render_net(self.obj.face,\
+                                                                vertex_cropped,color, sh_coef, self.A, R, T, images,ren.RASTERIZE_DIFFERENTIABLE_IMAGE,False, 5, True)
+        
+        
+    	
+    	#util.show_tensor_images(raster_image_intact,lmring)
+        raster_image_fitted = images*(1-raster_mask.unsqueeze(1))+raster_image*raster_mask.unsqueeze(1)
+        self.reconstructed_results = {'raster_masks':raster_mask,
+                                      'raster_imgs':raster_image,
+                'imgs_fitted':raster_image_fitted,
+                'proj_vert':projected_vertex_cropped,
+                'enc_paras':enc_paras
+                }
+        
+        return self.reconstructed_results
+
     
     def forward(self,data):
         #valid_mask: 1 indicating unoccluded part of faces, vice versa
